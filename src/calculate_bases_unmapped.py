@@ -43,12 +43,26 @@ def get_mapping_coverage_points(job, alignment_bed):
             mapping_coverage_points[contig_id].append((stop, False))
     return mapping_coverage_points
 
+# def merge_mapping_coverage_points(job, mapping_coverage_points):
+#     merged = col.defaultdict(list)
+#     for points in mapping_coverage_points:
+#         for key, values in points.items():
+#                 for value in values:
+#                     merged[key].append(value)
+#     return merged
+
 def merge_mapping_coverage_points(job, mapping_coverage_points):
+    """
+    mapping_coverage_points is a list of defaultdict(list), one for each liftover file.
+
+    This function outputs a single defaultdict(list), maintaining the keys of the input 
+    dicts, but with the internal lists appended to one another.
+    """
     merged = col.defaultdict(list)
-    for points in mapping_coverage_points:
-        for key, values in points.items():
-                for value in values:
-                    merged[key].append(value)
+    for liftover_dict in mapping_coverage_points:
+        for contig_id, points in liftover_dict.items():
+                for point in points:
+                    merged[contig_id].append(point)
     return merged
 
 def get_mapping_coverage_coordinates(job, mapping_coverage_points):
