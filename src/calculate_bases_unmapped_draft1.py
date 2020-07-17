@@ -175,38 +175,26 @@ def count_interval_size(job, interval_list_dict):
     return unmapped_seq_len
 
 def calculate_bases_unmapped(job, liftover_bed_files, contig_lengths, minimum_size_gap):
-    # print("before_print_contig_lengths")
-    # job.addChildJobFn(print_debug, "contig_lengths_incoming!", contig_lengths)
-    # print("after_print_contig_lengths")
-
-    # print("before_print_minimum_size_gap")
-    # job.addChildJobFn(print_debug, "minimum_size_gap_incoming!", minimum_size_gap)
-    # print("after_print_minimup_size_gap")
-
-
-    # #todo: remove debug:
-    # with open(job.fileStore.readGlobalFile(liftover_bed_files[0])) as inf:
-    #     print("liftover_bed_file_incoming!")
-    #     for line in inf:
-    #         print(line)
-    #     print("liftover_bed_file_done")
-
-
-    
     leader = job.addChildJobFn(empty)
     
     mapping_coverage_points = list()
     for bedfile in liftover_bed_files:
         mapping_coverage_points.append(leader.addChildJobFn(get_mapping_coverage_points, bedfile).rv())
+    
     coverage_points_jobs = leader.encapsulate()
 
-    #todo: delete debug:
-    coverage_points_jobs.addChildJobFn(print_debug_points, "mapping_coverage_points_incoming!", mapping_coverage_points)
-
     merged_mapping_coverage_points = coverage_points_jobs.addChildJobFn(merge_mapping_coverage_points, mapping_coverage_points).rv()
+
+
+    #todo: delete
+    # merged_mapping_coverage_points = col.defaultdict(list)
+    # for points in mapping_coverage_points:
+    #     merged_mapping_coverage_points = coverage_points_jobs.addChildJobFn(merge_mapping_coverage_points, merged_mapping_coverage_points, points).rv()
+
     merging_jobs = coverage_points_jobs.encapsulate()
 
     mapping_coverage_coordinates = merging_jobs.addChildJobFn(get_mapping_coverage_coordinates, merged_mapping_coverage_points).rv()
+
     mapping_coverage_coordinates_job = merging_jobs.encapsulate()
 
     #generate a namespace for poor_mapping_coverage_coordinates, which was developed in the ref-based mapper pipeline.
@@ -215,35 +203,24 @@ def calculate_bases_unmapped(job, liftover_bed_files, contig_lengths, minimum_si
     options.minimum_size_remap = minimum_size_gap
 
     poor_mapping_coverage_coordinates = mapping_coverage_coordinates_job.addChildJobFn(get_poor_mapping_coverage_coordinates, contig_lengths, mapping_coverage_coordinates, options).rv()
+
+    # seq_len_tot = sum(contig_lengths.values())
+    # print("Total length of reference:")
+    # print(seq_len_tot)
+    # print()
+    
     poor_mapping_coverage_coordinates_job = mapping_coverage_coordinates_job.encapsulate()
 
-    #todo: delete debug:
-    poor_mapping_coverage_coordinates_job.addChildJobFn(print_debug, "poor_mapping_coverage_coordinates_incoming!", poor_mapping_coverage_coordinates)
-
     unmapped_seq_len = poor_mapping_coverage_coordinates_job.addChildJobFn(count_interval_size, poor_mapping_coverage_coordinates).rv()
-    debug = poor_mapping_coverage_coordinates_job.encapsulate()
-    # debug.addChildJobFn(print_debug, "print debug unmapped_seq_len from inside calc_bases_unmapped:", unmapped_seq_len)
+    # debug = poor_mapping_coverage_coordinates_job.encapsulate()
+    # debug.addChildJobFn(print_debug, unmapped_seq_len)
 
     return unmapped_seq_len
     # print("bases in target of liftover bed that are unaligned to the source sequence (with gaps between alignments <" + str(minimum_size_gap) + " bases in size still counted as aligned):")
     # print(str(unmapped_seq_len) + " (" + str(round((unmapped_seq_len/seq_len_tot)*100, 2)) + "%)")
 
-def print_debug_points(job, message, thing):
-    print("before_print_points")
-    if len(thing) > 40:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing[0:40])
-    else:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
-    print("after_print_points")
-
-
-def print_debug(job, message, thing):
-    if len(thing) > 40:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing[0:40])
-    else:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
-
-    # print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
+# def print_debug(job, thing):
+#     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ print debug unmapped_seq_len from inside calc_bases_unmapped:", thing)
 
 def calculate_all_bases_unmapped(job, liftovers, contig_lengths, minimum_size_gap):
     """

@@ -40,24 +40,63 @@ def write_full_bed(job, contig_lengths):
 def liftover(job, hal_file, source_assembly, source_full_bed, target_assembly):
     out_bed_tmp = job.fileStore.getLocalTempFile()
     out_bed = job.fileStore.writeGlobalFile(out_bed_tmp)
-
-    subprocess.call(["halLiftover", job.fileStore.readGlobalFile(hal_file), source_assembly, job.fileStore.readGlobalFile(source_full_bed), target_assembly, job.fileStore.readGlobalFile(out_bed)])
     
+    #todo: remove debug:
+    job.addChildJobFn(print_debug, "halLiftover_arguments", [job.fileStore.readGlobalFile(hal_file), source_assembly, job.fileStore.readGlobalFile(source_full_bed), target_assembly, job.fileStore.readGlobalFile(out_bed)])
+    
+    # #todo: remove debug: (note that this will always fail b/c binary file)
+    # with open(job.fileStore.readGlobalFile(hal_file)) as inf:
+    #     print("hal_file_incoming!")
+    #     for line in inf:
+    #         print(line)
+    #     print("hal_file_done")
+
+    #todo: remove debug:
+    with open(job.fileStore.readGlobalFile(source_full_bed)) as inf:
+        print("source_full_bed_incoming!")
+        for line in inf:
+            print(line)
+        print("source_full_bed_done")
+
+    #todo: remove debug:
+    debug_stderr = job.fileStore.getLocalTempFile()
+    with open(debug_stderr, "w") as debug:
+        subprocess.run(["halLiftover", job.fileStore.readGlobalFile(hal_file), source_assembly, job.fileStore.readGlobalFile(source_full_bed), target_assembly, job.fileStore.readGlobalFile(out_bed)], stderr=debug)
+    with open(debug_stderr) as debug:
+        print("Debug incoming!")
+        for line in debug:
+            print(line)
+        print("Debug_done")
+
+    
+    #todo: remove debug:
+    debug_cnt = int()
+    with open(job.fileStore.readGlobalFile(out_bed)) as inf:
+        for line in inf:
+            job.addChildJobFn(print_debug, "example liftover line:", line)
+            if debug_cnt == 20:
+                break
+            debug_cnt += 1
+
     return out_bed
     
+def print_debug(job, message, thing):
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
+
+
 def all_to_all_liftovers(job, assembly_files, assembly_lengths, hal_file):
     """assembly_files is a dict with key: assembly name and value: assembly_file.
     """
-    lengths_jobs = job.addFollowOnJobFn(empty)
+    leader = job.addFollowOnJobFn(empty)
     
     # Then, make the full.bed files, which will act as srcBed in the liftover. This way,
     # the liftover will look for where the target genome is mapped to all possible locations
     # in the src genome.
     full_beds = dict()
     for asm in assembly_files:
-        full_beds[asm] = lengths_jobs.addChildJobFn(write_full_bed, assembly_lengths[asm]).rv()
+        full_beds[asm] = leader.addChildJobFn(write_full_bed, assembly_lengths[asm]).rv()
 
-    full_beds_jobs = lengths_jobs.addFollowOnJobFn(empty)
+    full_beds_jobs = leader.addFollowOnJobFn(empty)
 
     #liftovers is nested dict, with key:(target_asm), value:<dict, with key:source_asm, value:<list of liftover_files with target_asm as target> >
     liftovers = dict()
@@ -72,6 +111,33 @@ def all_to_all_liftovers(job, assembly_files, assembly_lengths, hal_file):
             liftovers[target_asm][source_asm] = full_beds_jobs.addChildJobFn(liftover, hal_file, source_asm, full_beds[source_asm], target_asm).rv()
     
     return liftovers
+
+
+# def all_to_ref_liftovers(job, assembly_files, assembly_lengths, reference_asm, hal_file):
+#     leader = job.addFollowOnJobFn(empty)
+#     # get all the full_beds, so that we can do a liftover on the full sequence in the assembly:
+#     full_beds = dict()
+#     for asm in assembly_files:
+#         full_beds[asm] = leader.addChildJobFn(write_full_bed, assembly_lengths[asm]).rv()
+#     full_beds_jobs = leader.addFollowOnJobFn(empty)
+
+#     # do all the liftovers (key:asm, value:bases_mapped_to_ref):
+#     liftovers = dict()
+#     for asm in assembly_files:
+#         if asm != reference_asm:
+#             liftover[asm] = full_beds_job.addChildJobFn(liftover, hal_file, asm, full_beds[asm], reference_asm).rv()
+
+#     return liftovers
+
+
+
+def asm_to_ref_liftover(job, asm, assembly_contig_lengths, reference_asm, hal_file):
+    # get the full_bed, for the liftover calculation on the full sequence in the assembly:
+    asm_full_bed_job = job.addChildJobFn(write_full_bed, assembly_contig_lengths)
+    asm_full_bed = asm_full_bed_job.rv()
+
+    # do all the liftovers (key:asm, value:bases_mapped_to_ref):
+    return asm_full_bed_job.addChildJobFn(liftover, hal_file, asm, asm_full_bed, reference_asm).rv()
 
 def main():
     # if I wanted to make this into a true command line tool, I'd fill out the parser.
