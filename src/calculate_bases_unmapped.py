@@ -230,20 +230,20 @@ def calculate_bases_unmapped(job, liftover_bed_files, contig_lengths, minimum_si
 
 def print_debug_points(job, message, thing):
     print("before_print_points")
-    if len(thing) > 40:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing[0:40])
-    else:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
-    print("after_print_points")
+    # if len(thing) > 40:
+    #     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing[0:40])
+    # else:
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
+    # print("after_print_points")
 
 
 def print_debug(job, message, thing):
-    if len(thing) > 40:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing[0:40])
-    else:
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
+    # if len(thing) > 40:
+    #     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing[0:40])
+    # else:
+        # print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
 
-    # print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", message, thing)
 
 def calculate_all_bases_unmapped(job, liftovers, contig_lengths, minimum_size_gap):
     """
