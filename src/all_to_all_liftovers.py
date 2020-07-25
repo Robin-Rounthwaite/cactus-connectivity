@@ -58,9 +58,12 @@ def liftover(job, hal_file, source_assembly, source_full_bed, target_assembly):
             print(line)
         print("source_full_bed_done")
 
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", job.fileStore.readGlobalFile(hal_file), source_assembly, job.fileStore.readGlobalFile(source_full_bed), target_assembly, job.fileStore.readGlobalFile(out_bed))
+
     #todo: remove debug:
     debug_stderr = job.fileStore.getLocalTempFile()
     with open(debug_stderr, "w") as debug:
+        # subprocess.run(["halLiftover", job.fileStore.readGlobalFile(hal_file), source_assembly, job.fileStore.readGlobalFile(source_full_bed), target_assembly, job.fileStore.readGlobalFile(out_bed)])
         subprocess.run(["halLiftover", job.fileStore.readGlobalFile(hal_file), source_assembly, job.fileStore.readGlobalFile(source_full_bed), target_assembly, job.fileStore.readGlobalFile(out_bed)], stderr=debug)
     with open(debug_stderr) as debug:
         print("Debug incoming!")
@@ -68,6 +71,13 @@ def liftover(job, hal_file, source_assembly, source_full_bed, target_assembly):
             print(line)
         print("Debug_done")
 
+    print("about_to_read out_bedfile")
+    with open(job.fileStore.readGlobalFile(out_bed)) as out_bedfile:
+        print("out_bedfile incoming!")
+        for line in out_bedfile:
+            print(line)
+        print("out_bedfile_done")
+    print("just_finished_reading out_bedfile")
     
     #todo: remove debug:
     debug_cnt = int()
@@ -131,7 +141,18 @@ def all_to_all_liftovers(job, assembly_files, assembly_lengths, hal_file):
 
 
 
+def ref_to_asm_liftover(job, ref, ref_contig_lengths, asm, hal_file):
+    # get the full_bed, for the liftover calculation on the full of the ref:
+    ref_full_bed_job = job.addChildJobFn(write_full_bed, ref_contig_lengths)
+    ref_full_bed = ref_full_bed_job.rv()
+
+    # do all the liftovers (key:asm, value:bases_mapped_to_ref):
+    return ref_full_bed_job.addChildJobFn(liftover, hal_file, ref, ref_full_bed, asm).rv()
+
 def asm_to_ref_liftover(job, asm, assembly_contig_lengths, reference_asm, hal_file):
+    """
+    #NOTE TO SELF: Below is the code for performing the opposite liftover of the one we want for the original graphs - the one that shows coverage in terms of the reference bases involved in a mapping, rather than the asm bases involved in a mapping. 
+    """
     # get the full_bed, for the liftover calculation on the full sequence in the assembly:
     asm_full_bed_job = job.addChildJobFn(write_full_bed, assembly_contig_lengths)
     asm_full_bed = asm_full_bed_job.rv()

@@ -104,7 +104,10 @@ def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_siz
     # Part 1: perform all_to_ref_liftovers:
     liftovers = dict()
     for asm in assembly_files:
-        liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.asm_to_ref_liftover, asm, contig_lengths[asm], ref_id, hal_file).rv()
+        print("REFIDREFIDREFIDREFIDREFIDREFIDREFIDREFIDREFIDREFIDREFID:", ref_id)
+        liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.ref_to_asm_liftover, ref_id, contig_lengths[ref_id], asm, hal_file).rv()
+        #NOTE TO SELF: below is the opposite of the liftover I actually want to run, here. It performs the liftover to find what bases in ref are involved in the mapping.
+        # liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.asm_to_ref_liftover, asm, contig_lengths[asm], ref_id, hal_file).rv()
     #     lengths_jobs.addFollowOnJobFn(print_file, liftovers[asm], 20)
     # lengths_jobs.addFollowOnJobFn(all_to_all_liftovers.print_debug, "liftovers dictionary", liftovers)
     liftovers_jobs = lengths_jobs.encapsulate()
@@ -130,7 +133,10 @@ def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_siz
             # liftovers_jobs.addChildJobFn(print_file, liftovers[asm], 30)
             # print("after_print_liftovers[asm]")
 
+            print("out_fxn_start")
             bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[asm], minimum_size_gap).rv()
+            print("out_fxn_end")
+
             # bases_unmapped[asm] = liftovers_jobs.addChildJobFn(get_bases_unmapped_between_two_asms, liftovers[asm_file] asm_file, ref_id, hal_file).rv()
     bases_unmapped_jobs = liftovers_jobs.encapsulate()
     #todo: should be formatted as an output file. Probably just a printout of dict(key:asm value:bases_unmapped)
@@ -151,7 +157,7 @@ def print_file(job, pfile, num_lines):
 def save_bases_unmapped_to_ref(job, ref_id, contig_lengths, bases_unmapped):
     output = job.fileStore.getLocalTempFile()
     with open(output, "w") as outf:
-        outf.write("asm\tassembly_lengths\tbases_unmapped\tbases_unmapped/assembly_lengths_ratio\n")
+        outf.write("asm\tbases_unmapped\tassembly_lengths\tbases_unmapped/assembly_lengths_ratio\n")
 
         asm_lengths = dict()
         for asm in contig_lengths:
@@ -237,6 +243,10 @@ def main():
             #     output = workflow.start(Job.wrapJobFn(get_asm_mapping_depths, assembly_files, hal_file))
             #todo: make it so pipline outputs important interim files if requested? Very useful for debugging/further analysis. 
             ref_id = options.get_bases_unmapped_to_ref
+            if ref_id == None: #todo: remove quick debugging patch I've added here.
+                print("ERROR: options.get_bases_unmapped_to_ref is None! Fix that!")
+                import sys
+                sys.exit()
             output = workflow.start(Job.wrapJobFn(get_bases_unmapped_to_ref, assembly_files, ref_id, hal_file, options.minimum_size_gap))
             
         else:
