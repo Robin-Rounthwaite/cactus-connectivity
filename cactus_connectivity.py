@@ -104,10 +104,11 @@ def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_siz
     # Part 1: perform all_to_ref_liftovers:
     liftovers = dict()
     for asm in assembly_files:
-        print("REFIDREFIDREFIDREFIDREFIDREFIDREFIDREFIDREFIDREFIDREFID:", ref_id)
-        liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.ref_to_asm_liftover, ref_id, contig_lengths[ref_id], asm, hal_file).rv()
-        #NOTE TO SELF: below is the opposite of the liftover I actually want to run, here. It performs the liftover to find what bases in ref are involved in the mapping.
-        # liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.asm_to_ref_liftover, asm, contig_lengths[asm], ref_id, hal_file).rv()
+        #NOTE TO SELF: below is the liftover I don't want to run. It performs the liftover to find what bases in asm are involved in the mapping are aligned to ref.
+        # liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.ref_to_asm_liftover, ref_id, contig_lengths[ref_id], asm, hal_file).rv()
+
+        #NOTE TO SELF: below is the liftover I actually want to run, here. It performs the liftover to find what bases in ref are involved in the mapping. Potential downside for either of these is if the asm for some reason maps many places in ref, or vice-versa, we won't know about that. 
+        liftovers[asm] = lengths_jobs.addChildJobFn(all_to_all_liftovers.asm_to_ref_liftover, asm, contig_lengths[asm], ref_id, hal_file).rv()
     #     lengths_jobs.addFollowOnJobFn(print_file, liftovers[asm], 20)
     # lengths_jobs.addFollowOnJobFn(all_to_all_liftovers.print_debug, "liftovers dictionary", liftovers)
     liftovers_jobs = lengths_jobs.encapsulate()
@@ -134,14 +135,19 @@ def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_siz
             # print("after_print_liftovers[asm]")
 
             print("out_fxn_start")
-            bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[asm], minimum_size_gap).rv()
+            #compatible with ref_to_asm_liftover
+            # bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[asm], minimum_size_gap).rv()
+            #compatible with asm_to_ref_liftover
+            bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[ref_id], minimum_size_gap).rv()
             print("out_fxn_end")
 
             # bases_unmapped[asm] = liftovers_jobs.addChildJobFn(get_bases_unmapped_between_two_asms, liftovers[asm_file] asm_file, ref_id, hal_file).rv()
     bases_unmapped_jobs = liftovers_jobs.encapsulate()
-    #todo: should be formatted as an output file. Probably just a printout of dict(key:asm value:bases_unmapped)
-    # return contig_lengths
-    return bases_unmapped_jobs.addChildJobFn(save_bases_unmapped_to_ref, ref_id, contig_lengths, bases_unmapped).rv()
+    # for use with ref_to_asm_liftover:
+    return bases_unmapped_jobs.addChildJobFn(save_bases_in_ref_unmapped_to_asms, ref_id, contig_lengths, bases_unmapped).rv()
+    # for use with ref_to_asm_liftover:
+    # return bases_unmapped_jobs.addChildJobFn(save_bases_in_asms_unmapped_to_ref, ref_id, contig_lengths, bases_unmapped).rv()
+
     #todo: consider automating calls to dipcall for comparisons, too.
 
 def print_file(job, pfile, num_lines):
@@ -154,7 +160,22 @@ def print_file(job, pfile, num_lines):
                 break
             line_cnt += 1
 
-def save_bases_unmapped_to_ref(job, ref_id, contig_lengths, bases_unmapped):
+def save_bases_in_ref_unmapped_to_asms(job, ref_id, contig_lengths, bases_unmapped):
+    output = job.fileStore.getLocalTempFile()
+    with open(output, "w") as outf:
+        outf.write("asm\tbases_unmapped\tref_length\tbases_unmapped/assembly_lengths_ratio\n")
+
+        asm_lengths = dict()
+        for asm in contig_lengths:
+            asm_lengths[asm] = get_asm_length(contig_lengths[asm])
+        
+        for asm in contig_lengths:
+            if asm != ref_id: #todo: consider adding reference to full analysis (even though meaningless)
+                outf.write(asm + "\t" + str(bases_unmapped[asm]) + "\t" + str(asm_lengths[ref_id]) + "\t" + str(bases_unmapped[asm]/asm_lengths[ref_id]) + "\n")
+    
+    return job.fileStore.writeGlobalFile(output)
+
+def save_bases_in_asms_unmapped_to_ref(job, ref_id, contig_lengths, bases_unmapped):
     output = job.fileStore.getLocalTempFile()
     with open(output, "w") as outf:
         outf.write("asm\tbases_unmapped\tassembly_lengths\tbases_unmapped/assembly_lengths_ratio\n")
