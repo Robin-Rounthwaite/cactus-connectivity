@@ -93,7 +93,7 @@ def asm_mapping_depths_output(job, mapping_depths, contig_lengths):
     
 #     return job.fileStore.writeGlobalFile(output)
 
-def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_size_gap):
+def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, options):
     leader = job.addChildJobFn(all_to_all_liftovers.empty)
 
     contig_lengths = dict()
@@ -126,8 +126,8 @@ def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_siz
             # liftovers_jobs.addChildJobFn(all_to_all_liftovers.print_debug, "contig_lengths_incoming!", contig_lengths[asm])
             # print("after_print_contig_lengths")
 
-            # print("before_print_minimum_size_gap")
-            # liftovers_jobs.addChildJobFn(all_to_all_liftovers.print_debug, "minimum_size_gap_incoming!", minimum_size_gap)
+            # print("before_print_options.minimum_size_gap")
+            # liftovers_jobs.addChildJobFn(all_to_all_liftovers.print_debug, "options.minimum_size_gap_incoming!", options.minimum_size_gap)
             # print("after_print_minimup_size_gap")
 
             # print("before_print_liftovers[asm]")
@@ -136,15 +136,18 @@ def get_bases_unmapped_to_ref(job, assembly_files, ref_id, hal_file, minimum_siz
 
             print("out_fxn_start")
             #compatible with ref_to_asm_liftover
-            # bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[asm], minimum_size_gap).rv()
+            # bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[asm], options.minimum_size_gap).rv()
             #compatible with asm_to_ref_liftover
-            bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[ref_id], minimum_size_gap).rv()
+            bases_unmapped[asm] = liftovers_jobs.addChildJobFn(calculate_bases_unmapped.calculate_bases_unmapped, [liftovers[asm]], contig_lengths[ref_id], options.minimum_size_gap).rv()
             print("out_fxn_end")
 
             # bases_unmapped[asm] = liftovers_jobs.addChildJobFn(get_bases_unmapped_between_two_asms, liftovers[asm_file] asm_file, ref_id, hal_file).rv()
     bases_unmapped_jobs = liftovers_jobs.encapsulate()
     # for use with ref_to_asm_liftover:
-    return bases_unmapped_jobs.addChildJobFn(save_bases_in_ref_unmapped_to_asms, ref_id, contig_lengths, bases_unmapped).rv()
+    if options.export_liftovers:
+        return bases_unmapped_jobs.addChildJobFn(save_bases_in_ref_unmapped_to_asms, ref_id, contig_lengths, bases_unmapped).rv(), liftovers
+    else:
+        return bases_unmapped_jobs.addChildJobFn(save_bases_in_ref_unmapped_to_asms, ref_id, contig_lengths, bases_unmapped).rv()
     # for use with ref_to_asm_liftover:
     # return bases_unmapped_jobs.addChildJobFn(save_bases_in_asms_unmapped_to_ref, ref_id, contig_lengths, bases_unmapped).rv()
 
@@ -163,7 +166,7 @@ def print_file(job, pfile, num_lines):
 def save_bases_in_ref_unmapped_to_asms(job, ref_id, contig_lengths, bases_unmapped):
     output = job.fileStore.getLocalTempFile()
     with open(output, "w") as outf:
-        outf.write("asm\tbases_unmapped\tref_length\tbases_unmapped/assembly_lengths_ratio\n")
+        outf.write("asm\tbases_unmapped_in_ref\tref_length\tbases_unmapped_in_ref/ref_length_ratio\n")
 
         asm_lengths = dict()
         for asm in contig_lengths:
@@ -178,7 +181,7 @@ def save_bases_in_ref_unmapped_to_asms(job, ref_id, contig_lengths, bases_unmapp
 def save_bases_in_asms_unmapped_to_ref(job, ref_id, contig_lengths, bases_unmapped):
     output = job.fileStore.getLocalTempFile()
     with open(output, "w") as outf:
-        outf.write("asm\tbases_unmapped\tassembly_lengths\tbases_unmapped/assembly_lengths_ratio\n")
+        outf.write("asm\tbases_unmapped_in_asm\tassembly_lengths\tbases_unmapped_in_asm/assembly_lengths_ratio\n")
 
         asm_lengths = dict()
         for asm in contig_lengths:
@@ -232,6 +235,8 @@ def main():
     parser.add_argument(
         '--get_bases_unmapped_to_ref', help="Given a string representing which asm is treated as the reference, gives the bases mapped to that ref for every other asm.", type=str)
     parser.add_argument(
+        '--export_liftovers', help="Used in conjunction with get_bases_unmapped_to_ref, will export all liftover bedfiles.", action='store_true')
+    parser.add_argument(
         '--output', help='The dir to save the output, target bedfiles.', default='./cactus_connectivity_output.txt', type=str)
     options = parser.parse_args()
     options.minimum_size_gap = 0
@@ -247,6 +252,7 @@ def main():
     # assembly_files = {"HG03098_paf_chr21": assembly_dir + "HG03098_paf_chr21.fa", "HG03492_paf_chr21": assembly_dir + "HG03492_paf_chr21.fa", "hg38_chr21": assembly_dir + "hg38_chr21.fa"}
     # hal_file = "./halLiftover_all_to_all/ref_based_small_chr21.hal"
 
+    liftovers = None
     with Toil(options) as workflow:
         if not workflow.options.restart:
             #importing files:
@@ -268,16 +274,34 @@ def main():
                 print("ERROR: options.get_bases_unmapped_to_ref is None! Fix that!")
                 import sys
                 sys.exit()
-            output = workflow.start(Job.wrapJobFn(get_bases_unmapped_to_ref, assembly_files, ref_id, hal_file, options.minimum_size_gap))
+            if options.export_liftovers:
+                output, liftovers = workflow.start(Job.wrapJobFn(get_bases_unmapped_to_ref, assembly_files, ref_id, hal_file, options))
+            else:
+                output = workflow.start(Job.wrapJobFn(get_bases_unmapped_to_ref, assembly_files, ref_id, hal_file, options))
+
             
         else:
-            output = workflow.restart()
+            if options.export_liftovers:
+                output, liftovers = workflow.restart()
+            else:
+                output = workflow.restart()
+
         # write output
         # print("output:", output)
         workflow.exportFile(output, 'file://' + os.path.abspath(options.output))
+
+        if liftovers is not None: #i.e. if options.export_liftovers is True
+            for asm, liftover_file in liftovers.items():
+                workflow.exportFile(liftover_file, 'file://' + os.path.abspath(".".join(options.output.split(".")[:-1])) + "_liftover_asm_" + asm + ".bed")
 
             
 
 
 if __name__ == "__main__":
     main()
+
+# #%%
+# test = './cactus_connectivity_output.txt'
+
+# asm = "test_asm"
+# os.path.abspath(".".join(test.split(".")[:-1])) + "_liftover_asm_" + asm + ".bed"
